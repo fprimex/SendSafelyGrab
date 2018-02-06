@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -66,10 +67,12 @@ namespace SendSafelyGrab
 
                     // Download the file again.
                     PackageInformation pkgToDownload = ssApi.GetPackageInformationFromLink(packageLink);
-                    foreach (File file in pkgToDownload.Files)
+                    foreach (SendSafely.File file in pkgToDownload.Files)
                     {
                         System.IO.FileInfo downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new ProgressCallback());
                         Console.WriteLine("Downloaded File to path: " + downloadedFile.FullName);
+                        System.IO.File.Move(downloadedFile.FullName, System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                        Console.WriteLine("Moved file to: " + System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
                     }
                 }
                 catch (SendSafely.Exceptions.BaseException ex)
