@@ -22,19 +22,33 @@ namespace SendSafelyGrab
                 HelpText = "SendSafely API secret.")]
         public string SendSafelySecret { get; set; }
 
+        [Option('v', "verbose", Required = false,
+                Default = false,
+                HelpText = "Show verbose output.")]
+        public bool Verbose { get; set; }
+
         [Value(0, MetaName = "link",
                HelpText = "SendSafely package link.",
                Required = true)]
         public string SendSafelyLink { get; set; }
     }
 
-    class ProgressCallback : ISendSafelyProgress
+    class SilentProgressCallback : ISendSafelyProgress
     {
         public void UpdateProgress(string prefix, double progress)
         {
-            Console.WriteLine(prefix + " " + progress + "%");
+            // Do nothing
         }
     }
+
+	class VerboseProgressCallback : ISendSafelyProgress
+	{
+		public void UpdateProgress(string prefix, double progress)
+		{
+			Console.Error.WriteLine(prefix + " " + progress + "%");
+		}
+	}
+
 
     class Program
     {
@@ -45,11 +59,20 @@ namespace SendSafelyGrab
                        .WithNotParsed<Options>((errs) => HandleParseError(errs));
         }
 
+        static void VerboseWriteLine(bool v, string msg)
+        {
+            if(v)
+            {
+                Console.Error.WriteLine(msg);
+            }
+        }
+
         static int RunOptionsAndReturnExitCode(Options options)
         {
             string sendSafelyHost = options.SendSafelyHost ?? Environment.GetEnvironmentVariable("SS_HOST");
             string userApiKey = options.SendSafelyKey ?? Environment.GetEnvironmentVariable("SS_KEY");
             string userApiSecret = options.SendSafelySecret ?? Environment.GetEnvironmentVariable("SS_SECRET");
+            bool verbose = options.Verbose;
             string packageLink = options.SendSafelyLink;
             string packageId = "";
 
@@ -60,7 +83,7 @@ namespace SendSafelyGrab
             }
 
             // Initialize the API 
-            Console.WriteLine("Initializing API");
+            VerboseWriteLine(verbose, "Initializing API");
             ClientAPI ssApi = new ClientAPI();
             ssApi.InitialSetup(sendSafelyHost, userApiKey, userApiSecret);
 
@@ -69,17 +92,28 @@ namespace SendSafelyGrab
                 // Verify the API key and Secret before continuing.  
                 // Print the authenticated user's email address to the screen if valid. 
                 string userEmail = ssApi.VerifyCredentials();
-                Console.WriteLine("Connected to SendSafely as user " + userEmail);
+                VerboseWriteLine(verbose, "Connected to SendSafely as user " + userEmail);
 
                 // Download the file again.
                 PackageInformation pkgToDownload = ssApi.GetPackageInformationFromLink(packageLink);
                 foreach (SendSafely.File file in pkgToDownload.Files)
                 {
-                    System.IO.FileInfo downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new ProgressCallback());
-                    Console.WriteLine("Downloaded File to path: " + downloadedFile.FullName);
-                    // throws System.IO.IOException on ERROR_ALREADY_EXISTS
-                    System.IO.File.Move(downloadedFile.FullName, System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
-                    Console.WriteLine("Moved file to: " + System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                    if(! System.IO.File.Exists(file.FileName))
+                    {
+                        System.IO.FileInfo downloadedFile;
+                        if(verbose)
+                        {
+                            downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new VerboseProgressCallback());
+                        }
+                        else
+                        {
+                            downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new SilentProgressCallback());
+                        }
+
+                        VerboseWriteLine(verbose, "Downloaded File to path: " + downloadedFile.FullName);
+                        // throws System.IO.IOException on ERROR_ALREADY_EXISTS
+                        System.IO.File.Move(downloadedFile.FullName, System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                        VerboseWriteLine(verbose, "Moved file to: " + System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
                 }
             }
             catch (SendSafely.Exceptions.BaseException ex)
@@ -89,17 +123,17 @@ namespace SendSafelyGrab
                 {
                     // These exceptions indicate a problem that occurred during package preparation.  
                     // If a package was created, delete it so it does not remain in the user's incomplete pacakge list.  
-                    Console.WriteLine("Error: " + ex.Message);
+                    VerboseWriteLine(verbose, "Error: " + ex.Message);
                     if (!String.IsNullOrEmpty(packageId))
                     {
                         ssApi.DeleteTempPackage(packageId);
-                        Console.WriteLine("Deleted Package - Id#:" + packageId);
+                        VerboseWriteLine(verbose, "Deleted Package - Id#:" + packageId);
                     }
                 }
                 else
                 {
                     // Throw the exception if it was not one of the specific ones we handled by deleting the package. 
-                    Console.WriteLine("Error: " + ex.Message);
+                    VerboseWriteLine(verbose, "Error: " + ex.Message);
                 }
             }
             return 0;
