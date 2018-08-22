@@ -27,10 +27,10 @@ namespace SendSafelyGrab
                 HelpText = "Show verbose output.")]
         public bool Verbose { get; set; }
 
-        [Value(0, MetaName = "link",
-               HelpText = "SendSafely package link.",
+        [Value(0, MetaName = "text",
+               HelpText = "Text containing SendSafely links.",
                Required = true)]
-        public string SendSafelyLink { get; set; }
+        public string TextLinks { get; set; }
     }
 
     class SilentProgressCallback : ISendSafelyProgress
@@ -73,7 +73,7 @@ namespace SendSafelyGrab
             string userApiKey = options.SendSafelyKey ?? Environment.GetEnvironmentVariable("SS_KEY");
             string userApiSecret = options.SendSafelySecret ?? Environment.GetEnvironmentVariable("SS_SECRET");
             bool verbose = options.Verbose;
-            string packageLink = options.SendSafelyLink;
+            string textLinks = options.TextLinks;
             string packageId = "";
 
             if (sendSafelyHost == null || userApiKey == null || userApiSecret == null)
@@ -94,26 +94,31 @@ namespace SendSafelyGrab
                 string userEmail = ssApi.VerifyCredentials();
                 VerboseWriteLine(verbose, "Connected to SendSafely as user " + userEmail);
 
-                // Download the file again.
-                PackageInformation pkgToDownload = ssApi.GetPackageInformationFromLink(packageLink);
-                foreach (SendSafely.File file in pkgToDownload.Files)
+                System.Collections.Generic.List<string> links = ssApi.ParseLinksFromText(textLinks);
+                foreach (string plink in links)
                 {
-                    if(! System.IO.File.Exists(file.FileName))
+                    Console.WriteLine(plink);
+                    PackageInformation pkgToDownload = ssApi.GetPackageInformationFromLink(plink);
+                    foreach (SendSafely.File file in pkgToDownload.Files)
                     {
-                        System.IO.FileInfo downloadedFile;
-                        if(verbose)
+                        if(! System.IO.File.Exists(file.FileName))
                         {
-                            downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new VerboseProgressCallback());
-                        }
-                        else
-                        {
-                            downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new SilentProgressCallback());
-                        }
+                            System.IO.FileInfo downloadedFile;
+                            if(verbose)
+                            {
+                                downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new VerboseProgressCallback());
+                            }
+                            else
+                            {
+                                downloadedFile = ssApi.DownloadFile(pkgToDownload.PackageId, file.FileId, pkgToDownload.KeyCode, new SilentProgressCallback());
+                            }
 
-                        VerboseWriteLine(verbose, "Downloaded File to path: " + downloadedFile.FullName);
-                        // throws System.IO.IOException on ERROR_ALREADY_EXISTS
-                        System.IO.File.Move(downloadedFile.FullName, System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
-                        VerboseWriteLine(verbose, "Moved file to: " + System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                            VerboseWriteLine(verbose, "Downloaded File to path: " + downloadedFile.FullName);
+                            // throws System.IO.IOException on ERROR_ALREADY_EXISTS
+                            System.IO.File.Move(downloadedFile.FullName, System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                            VerboseWriteLine(verbose, "Moved file to: " + System.IO.Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + file.FileName);
+                        }
+                    }
                 }
             }
             catch (SendSafely.Exceptions.BaseException ex)
