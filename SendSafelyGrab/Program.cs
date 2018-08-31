@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 using CommandLine;
 using SendSafely;
+using SendSafely.Utilities;
 
 
 namespace SendSafelyGrab
@@ -94,27 +95,25 @@ namespace SendSafelyGrab
 
             try
             {
-                // Initialize the API 
-                ssApi.InitialSetup(sendSafelyHost, userApiKey, userApiSecret);
-
-                System.Collections.Generic.List<string> links = ssApi.ParseLinksFromText(textLinks);
+                SendSafely.Utilities.ParseLinksUtility parser = new SendSafely.Utilities.ParseLinksUtility();
+                System.Collections.Generic.List<string> links = parser.Parse(textLinks);
 
                 if(links.Count == 0)
                 {
                     return 0;
                 }
-
-                foreach (string plink in links)
+                else
                 {
-                    if(ssApi == null)
-                    {
+                        // Initialize the API 
+                        ssApi.InitialSetup(sendSafelyHost, userApiKey, userApiSecret);
+
                         // Verify the API key and Secret before continuing.  
                         // Print the authenticated user's email address to the screen if valid. 
                         userEmail = ssApi.VerifyCredentials();
+                }
 
-                        //VerboseWriteLine(verbose, "Connected to SendSafely as user " + userEmail);
-                    }
-
+                foreach (string plink in links)
+                {
                     PackageInformation pkgToDownload = ssApi.GetPackageInformationFromLink(plink);
                     foreach (SendSafely.File file in pkgToDownload.Files)
                     {
@@ -149,7 +148,6 @@ namespace SendSafelyGrab
 
                             // throws System.IO.IOException on ERROR_ALREADY_EXISTS
                             System.IO.File.Move(downloadedFile.FullName, destFile);
-                            //VerboseWriteLine(verbose, "Moved file to: " + destFile);
                             Console.WriteLine(file.FileName);
                         }
                     }
